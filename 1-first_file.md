@@ -53,13 +53,13 @@ sudo sysctl --system
 ```bash
 sudo apt-get update
 sudo apt-get install -y apt-transport-https ca-certificates curl
-sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
-echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+sudo curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-archive-keyring.gpg
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
 ```
 ```bash
 sudo apt-get update
 apt-cache madison kubeadm
-sudo apt-get install -y kubelet=1.22.0-00 kubeadm=1.22.0-00 kubectl=1.22.0-00
+sudo apt-get install -y kubelet=1.24.0-00 kubeadm=1.24.0-00 kubectl=1.24.0-00 cri-tools=1.24.2-00
 sudo apt-mark hold kubelet kubeadm kubectl
 ```
 
@@ -78,17 +78,15 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
 ```
 
-## Step 6: Upgrade Kubeadm Cluster
+## Step 6: Connect Worker Node (Only worker node)
 ```bash
-apt-cache madison kubeadm
-apt-mark unhold kubelet kubectl kubeadm
-apt-get update && apt-get install -y kubelet=1.23.7-00 kubectl=1.23.7-00 kubeadm=1.23.7-00
-apt-mark hold kubelet kubectl
-kubeadm version
-kubeadm upgrade plan
-kubeadm upgrade apply 1.23.0
-systemctl daemon-reload
-systemctl restart kubelet
+kubeadm join 159.89.165.203:6443 --token qmw5dj.ljdh8r74ce3y85ad \
+        --discovery-token-ca-cert-hash sha256:83374ec05088fa7efe9c31cce63326ae7037210ab049048ef08f8c961a048ddf
 ```
 
-
+## Step 6: Connect Worker Node (Only worker node)
+```bash
+kubectl get nodes
+kubectl run nginx --image=nginx
+kubectl get pods -o wide
+```
