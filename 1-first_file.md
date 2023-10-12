@@ -84,7 +84,7 @@ kubeadm join 159.89.165.203:6443 --token qmw5dj.ljdh8r74ce3y85ad \
         --discovery-token-ca-cert-hash sha256:83374ec05088fa7efe9c31cce63326ae7037210ab049048ef08f8c961a048ddf
 ```
 
-## Step 6: Connect Worker Node (Only worker node)
+## Step 7: Connect Worker Node (Only worker node)
 ```bash
 kubectl get nodes
 kubectl run nginx --image=nginx
