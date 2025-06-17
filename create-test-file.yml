@@ -1,0 +1,33 @@
+---
+- name: Create test file on remote Linux machine
+  hosts: all
+  become: yes
+  gather_facts: no
+  
+  tasks:
+    - name: Create test.txt file in /tmp directory
+      ansible.builtin.file:
+        path: /tmp/test.txt
+        state: touch
+        owner: root
+        group: root
+        mode: '0644'
+      
+    - name: Add content to test.txt file
+      ansible.builtin.lineinfile:
+        path: /tmp/test.txt
+        line: "This is a test file created by Ansible playbook"
+        create: yes
+        
+    - name: Display confirmation message
+      ansible.builtin.debug:
+        msg: "test.txt file has been successfully created in /tmp directory"
+
+    - name: Verify file exists
+      ansible.builtin.stat:
+        path: /tmp/test.txt
+      register: file_status
+      
+    - name: Show file status
+      ansible.builtin.debug:
+        msg: "File exists: {{ file_status.stat.exists }}, Size: {{ file_status.stat.size }} bytes"
