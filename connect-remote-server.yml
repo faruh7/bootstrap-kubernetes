@@ -1,0 +1,183 @@
+---
+- name: Connect and configure remote Linux server
+  hosts: remote_servers
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    # Default variables - can be overridden
+    remote_user: "{{ ansible_user | default('ubuntu') }}"
+    ssh_key_path: "{{ ansible_ssh_private_key_file | default('~/.ssh/id_rsa') }}"
+    
+  tasks:
+    - name: Test connection to remote server
+      ping:
+      register: ping_result
+      
+    - name: Display connection status
+      debug:
+        msg: "Successfully connected to {{ inventory_hostname }} ({{ ansible_facts['ansible_default_ipv4']['address'] }})"
+      when: ping_result is succeeded
+      
+    - name: Gather system information
+      setup:
+      register: system_info
+      
+    - name: Display system information
+      debug:
+        msg: |
+          Server: {{ inventory_hostname }}
+          OS: {{ ansible_facts['ansible_distribution'] }} {{ ansible_facts['ansible_distribution_version'] }}
+          Kernel: {{ ansible_facts['ansible_kernel'] }}
+          Architecture: {{ ansible_facts['ansible_architecture'] }}
+          CPU Cores: {{ ansible_facts['ansible_processor_vcpus'] }}
+          Total Memory: {{ (ansible_facts['ansible_memtotal_mb'] / 1024) | round(2) }} GB
+          Uptime: {{ ansible_facts['ansible_uptime_seconds'] | int // 86400 }} days
+          
+    - name: Update package cache (Ubuntu/Debian)
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_facts['ansible_os_family'] == "Debian"
+      
+    - name: Update package cache (CentOS/RHEL)
+      yum:
+        update_cache: yes
+      when: ansible_facts['ansible_os_family'] == "RedHat"
+      
+    - name: Install essential packages (Ubuntu/Debian)
+      apt:
+        name:
+          - curl
+          - wget
+          - vim
+          - htop
+          - git
+          - unzip
+          - software-properties-common
+          - apt-transport-https
+          - ca-certificates
+          - gnupg
+          - lsb-release
+        state: present
+      when: ansible_facts['ansible_os_family'] == "Debian"
+      
+    - name: Install essential packages (CentOS/RHEL)
+      yum:
+        name:
+          - curl
+          - wget
+          - vim
+          - htop
+          - git
+          - unzip
+          - yum-utils
+          - device-mapper-persistent-data
+          - lvm2
+        state: present
+      when: ansible_facts['ansible_os_family'] == "RedHat"
+      
+    - name: Check if Docker is installed
+      command: docker --version
+      register: docker_check
+      ignore_errors: yes
+      changed_when: false
+      
+    - name: Display Docker status
+      debug:
+        msg: "Docker is {{ 'installed' if docker_check.rc == 0 else 'not installed' }}"
+        
+    - name: Check if Kubernetes tools are installed
+      command: "{{ item }} --version"
+      register: k8s_tools_check
+      ignore_errors: yes
+      changed_when: false
+      loop:
+        - kubectl
+        - kubeadm
+        - kubelet
+        
+    - name: Display Kubernetes tools status
+      debug:
+        msg: "{{ item.item }} is {{ 'installed' if item.rc == 0 else 'not installed' }}"
+      loop: "{{ k8s_tools_check.results }}"
+      
+    - name: Create remote user if not exists
+      user:
+        name: "{{ remote_user }}"
+        shell: /bin/bash
+        create_home: yes
+        groups: sudo
+        append: yes
+      when: remote_user != 'root'
+      
+    - name: Set up SSH key authentication
+      authorized_key:
+        user: "{{ remote_user }}"
+        key: "{{ lookup('file', ssh_key_path + '.pub') }}"
+        state: present
+      when: ssh_key_path is defined
+      ignore_errors: yes
+      
+    - name: Configure SSH security settings
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        backup: yes
+      loop:
+        - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin no' }
+        - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication no' }
+        - { regexp: '^#?PubkeyAuthentication', line: 'PubkeyAuthentication yes' }
+      notify: restart ssh
+      
+    - name: Configure firewall (UFW for Ubuntu/Debian)
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - '22'    # SSH
+        - '6443'  # Kubernetes API server
+        - '2379'  # etcd client
+        - '2380'  # etcd peer
+        - '10250' # kubelet
+        - '10251' # kube-scheduler
+        - '10252' # kube-controller-manager
+      when: ansible_facts['ansible_os_family'] == "Debian"
+      
+    - name: Enable UFW firewall
+      ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+      when: ansible_facts['ansible_os_family'] == "Debian"
+      
+  handlers:
+    - name: restart ssh
+      systemd:
+        name: ssh
+        state: restarted
+        enabled: yes
+      when: ansible_facts['ansible_os_family'] == "Debian"
+      
+    - name: restart sshd
+      systemd:
+        name: sshd
+        state: restarted
+        enabled: yes
+      when: ansible_facts['ansible_os_family'] == "RedHat"
+      
+  post_tasks:
+    - name: Display connection summary
+      debug:
+        msg: |
+          ============================================
+          Remote Server Connection Summary
+          ============================================
+          Server: {{ inventory_hostname }}
+          Status: Connected Successfully
+          User: {{ ansible_user }}
+          OS: {{ ansible_facts['ansible_distribution'] }} {{ ansible_facts['ansible_distribution_version'] }}
+          IP: {{ ansible_facts['ansible_default_ipv4']['address'] }}
+          ============================================
